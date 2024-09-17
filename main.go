@@ -75,37 +75,40 @@ func GetTerminalSize() (*Winsize, error) {
 	return ws, nil
 }
 
-const SIZE = 4
+const (
+	SIZE          = 4
+	WIN_CONDITION = 2048
+)
 
 type Board [SIZE][SIZE]uint
 
 type GameState struct {
-	board         Board
-	previousBoard Board
-	canGoBack     bool
-	message       string
+	board               Board
+	previousBoard       Board
+	canGoBack           bool
+	message             string
+	reachedWinCondition bool
 }
 
 func NewBoard() Board {
-	return Board{
-		{0, 0, 0, 0},
-		{0, 0, 0, 0},
-		{0, 0, 0, 0},
-		{0, 0, 0, 0},
+	board := Board{}
+
+	for i := 0; i < SIZE; i++ {
+		for j := 0; j < SIZE; j++ {
+			board[i][j] = 0
+		}
 	}
+
+	return board
 }
 
 func NewGameState() GameState {
 	g := GameState{
-		board: NewBoard(),
-		// board: Board{
-		// 	{0, 0, 0, 0},
-		// 	{0, 0, 0, 0},
-		// 	{0, 0, 0, 0},
-		// 	{0, 0, 67108864, 67108864},
-		// },
-		previousBoard: Board{},
-		canGoBack:     false,
+		board:               NewBoard(),
+		previousBoard:       Board{},
+		canGoBack:           false,
+		message:             "",
+		reachedWinCondition: false,
 	}
 
 	g.SpawnRandomNumber()
@@ -145,34 +148,29 @@ func (g *GameState) GridString(paddingMaybe ...string) string {
 			case 0:
 				num = strings.Repeat(" ", maxNumLen)
 			case 2:
-				fallthrough
+				num = "\033[30;48;5;231m" + paddedNum + "\033[0m"
 			case 4:
-				// black on white
-				num = "\033[1;30;47m" + paddedNum + "\033[0m"
+				num = "\033[30;48;5;230m" + paddedNum + "\033[0m"
 			case 8:
-				fallthrough
+				num = "\033[30;48;5;216m" + paddedNum + "\033[0m"
 			case 16:
-				// black on orange
-				num = "\033[1;30;43m" + paddedNum + "\033[0m"
+				num = "\033[30;48;5;209m" + paddedNum + "\033[0m"
 			case 32:
-				fallthrough
+				num = "\033[30;48;5;167m" + paddedNum + "\033[0m"
 			case 64:
-				// white on red
-				num = "\033[1;37;41m" + paddedNum + "\033[0m"
+				num = "\033[30;48;5;203m" + paddedNum + "\033[0m"
 			case 128:
-				fallthrough
+				num = "\033[30;48;5;222m" + paddedNum + "\033[0m"
 			case 256:
-				fallthrough
+				num = "\033[30;48;5;221m" + paddedNum + "\033[0m"
 			case 512:
 				fallthrough
 			case 1024:
-				fallthrough
+				num = "\033[30;48;5;178m" + paddedNum + "\033[0m"
 			case 2048:
-				// black on yellow
-				num = "\033[1;30;43m" + paddedNum + "\033[0m"
+				num = "\033[30;48;5;214m" + paddedNum + "\033[0m"
 			default:
-				// white on black
-				num = "\033[1;37;40m" + paddedNum + "\033[0m"
+				num = "\033[1;48;5;237m" + paddedNum + "\033[0m"
 			}
 			s += num
 			s += " "
@@ -271,7 +269,67 @@ func (b *Board) Equals(other Board) bool {
 	return true
 }
 
+func (b *Board) CanMoveUp() bool {
+	for j := 0; j < SIZE; j++ {
+		for i := 1; i < SIZE; i++ {
+			if b[i][j] != 0 {
+				if b[i-1][j] == 0 || b[i-1][j] == b[i][j] {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func (b *Board) CanMoveDown() bool {
+	for j := 0; j < SIZE; j++ {
+		for i := SIZE - 2; i >= 0; i-- {
+			if b[i][j] != 0 {
+				if b[i+1][j] == 0 || b[i+1][j] == b[i][j] {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func (b *Board) CanMoveRight() bool {
+	for i := 0; i < SIZE; i++ {
+		for j := SIZE - 2; j >= 0; j-- {
+			if b[i][j] != 0 {
+				if b[i][j+1] == 0 || b[i][j+1] == b[i][j] {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func (b *Board) CanMoveLeft() bool {
+	for i := 0; i < SIZE; i++ {
+		for j := 1; j < SIZE; j++ {
+			if b[i][j] != 0 {
+				if b[i][j-1] == 0 || b[i][j-1] == b[i][j] {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
 func (g *GameState) MoveUp() bool {
+	if !g.board.CanMoveUp() {
+		return false
+	}
+
 	newBoard := g.board
 
 	for j := 0; j < SIZE; j++ {
@@ -302,6 +360,10 @@ func (g *GameState) MoveUp() bool {
 }
 
 func (g *GameState) MoveDown() bool {
+	if !g.board.CanMoveDown() {
+		return false
+	}
+
 	newBoard := g.board
 
 	for j := 0; j < SIZE; j++ {
@@ -332,6 +394,10 @@ func (g *GameState) MoveDown() bool {
 }
 
 func (g *GameState) MoveRight() bool {
+	if !g.board.CanMoveRight() {
+		return false
+	}
+
 	newBoard := g.board
 
 	for i := 0; i < SIZE; i++ {
@@ -362,6 +428,10 @@ func (g *GameState) MoveRight() bool {
 }
 
 func (g *GameState) MoveLeft() bool {
+	if !g.board.CanMoveLeft() {
+		return false
+	}
+
 	newBoard := g.board
 
 	for i := 0; i < SIZE; i++ {
@@ -413,6 +483,30 @@ func main() {
 
 	go func() {
 		for {
+			if !g.board.CanMoveUp() && !g.board.CanMoveDown() && !g.board.CanMoveRight() && !g.board.CanMoveLeft() {
+				g.message = "game over"
+				g.Display()
+				for {
+					confirm := getch()
+					if confirm == 'r' {
+						g = NewGameState()
+						break
+					} else if confirm == 'q' {
+						die(0)
+					} else if confirm == 'b' && g.canGoBack {
+						g.board, g.previousBoard = g.previousBoard, g.board
+						g.canGoBack = false
+						break
+					}
+				}
+			}
+
+			if g.reachedWinCondition || g.board.max() >= WIN_CONDITION {
+				g.message = "game has been won, playing in endless mode"
+				g.reachedWinCondition = true
+				g.Display()
+			}
+
 			ch := getch()
 
 			if ch == 27 {
